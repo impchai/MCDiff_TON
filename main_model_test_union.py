@@ -13,14 +13,12 @@ class CSDI_base(nn.Module):
         self.diffusion = diffusion
         self.emb_time_dim = config["diffusion"]["channels"]
         self.emb_feature_dim = config["diffusion"]["channels"]
-        self.is_unconditional = config["model"]["is_unconditional"]
 
 
 
         # 计算总的嵌入维度
         self.emb_total_dim = self.emb_time_dim + self.emb_feature_dim
-        if self.is_unconditional == False:
-            self.emb_total_dim += 1  # for conditional mask
+
         self.embed_layer = nn.Embedding(
             num_embeddings=self.target_dim, embedding_dim=self.emb_feature_dim
         )
@@ -30,8 +28,8 @@ class CSDI_base(nn.Module):
         config_diff["side_dim"] = self.emb_total_dim
         config_diff["side_dim_time"] = self.emb_time_dim
 
-        input_dim = 1 if self.is_unconditional == True else 2
-        self.diffmodel = diff_CSDI(config_diff, input_dim)
+
+        self.diffmodel = diff_CSDI(config_diff, inputdim=1)
 
         self.num_steps = config_diff["num_steps"]
         if config_diff["schedule"] == "quad":

@@ -9,6 +9,7 @@ from main_model_test_union import CSDI_Value
 from dataset_physio_4traffic_new import get_dataloader
 from utils_test import train, evaluate
 from diffusion import create_diffusion
+from exe_contrast import contrastive_pretrain
 import numpy as np
 import random
 
@@ -44,7 +45,7 @@ parser.add_argument("--traindata", type=str, default='TrafficData')
 
 parser.add_argument("--config", type=str, default="base.yaml")
 parser.add_argument('--device', default='cuda:0', help='Device for Attack')
-parser.add_argument("--seed", type=int, default=2025)
+parser.add_argument("--seed", type=int, default=1)
 parser.add_argument("--modelfolder", type=str, default="")
 parser.add_argument("--nsample", type=int, default=30)
 parser.add_argument("--city", type=str, default='nc',help='[nc, nj]')
@@ -52,21 +53,6 @@ parser.add_argument("--city", type=str, default='nc',help='[nc, nj]')
 args = parser.parse_args()
 print(args)
 setup_seed(args.seed)
-def trainer(args, model, train_loader, optimizer, epoch, total_epoch):
-    loss_epoch = []
-    model.train()
-    for step, batch in enumerate(train_loader):
-        optimizer.zero_grad()
-
-        img, poi, human, data_mean = batch[1].to(args.device).float(),batch[2].to(args.device).float(),batch[3].to(args.device).float(),batch[4].to(args.device).float()
-        loss = model(img, poi, human, data_mean)
-
-        loss.backward()
-        optimizer.step()
-
-        loss_epoch.append(loss.item())
-    print(f"TrainEpoch [{epoch}/{total_epoch}\t train_loss_epoch:{np.mean(loss_epoch)}")
-    return np.mean(loss_epoch)
 
 city = args.city
 
@@ -99,6 +85,8 @@ train_loader, valid_loader, test_loader = get_dataloader(
 )
 
 
+contrastive_pretrain(args, foldername, train_loader, valid_loader, test_loader)
+
 diffusion = create_diffusion(timestep_respacing="", diffusion_steps = config["diffusion"]["num_steps"])
 model = CSDI_Value(config, diffusion, args.device).to(args.device)
 
@@ -106,6 +94,8 @@ model = CSDI_Value(config, diffusion, args.device).to(args.device)
 dm_mean, dm_std = compute_target_stats(train_loader, args.device)
 model.diffmodel.pretrained_contrast_model.set_target_stats(dm_mean, dm_std)
 print("target mean:", dm_mean.tolist(), " std:", dm_std.tolist())
+
+model.diffmodel.pretrained_contrast_model.load_state_dict(torch.load(foldername + 'best.tar'), strict=True)
 
 total_params = sum(p.numel() for p in model.parameters())
 print(f"Total parameters: {total_params}")
@@ -132,5 +122,5 @@ evaluate(model, valid_loader, nsample=args.nsample, scaler=1, foldername=foldern
 inferring_time =  time.time()
 inferring_used = inferring_time - trainings_time
 
-print('训练时长',training_used)
-print('推断时长', inferring_used)
+print('Training time',training_used)
+print('Inference time', inferring_used)

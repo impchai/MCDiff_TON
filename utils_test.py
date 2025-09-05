@@ -3,7 +3,6 @@ import torch
 from torch.optim import Adam, AdamW
 from tqdm import tqdm
 import pickle
-import math
 
 def train(
     model,
@@ -13,7 +12,7 @@ def train(
     valid_epoch_interval=50,
     foldername="",
 ):
-    optimizer = AdamW([p for p in model.parameters() if p.requires_grad == True], lr=config["lr"], weight_decay=1e-4)
+    optimizer = AdamW([p for p in model.parameters() if p.requires_grad == True], lr=config["lr"], weight_decay=1e-3)
     if foldername != "":
         output_path = foldername + "/model.pth"
 
@@ -79,31 +78,11 @@ def train(
 
             else:
                 early_stop = early_stop + 1
-                print('Earlu stop ITER', early_stop)
+                print('Early stop ITER', early_stop)
         if early_stop > 5:
             break
 
 
-
-
-def _anneal_lr(self):
-    if self.step < self.warmup_steps:
-        lr = self.lr * (self.step+1) / self.warmup_steps
-    elif self.step < self.lr_anneal_steps:
-        lr = self.min_lr + (self.lr - self.min_lr) * 0.5 * (
-            1.0
-            + math.cos(
-                math.pi
-                * (self.step - self.warmup_steps)
-                / (self.lr_anneal_steps - self.warmup_steps)
-            )
-        )
-    else:
-        lr = self.min_lr
-    for param_group in self.opt.param_groups:
-        param_group["lr"] = lr
-    self.writer.add_scalar('Training/LR', lr, self.step)
-    return lr
 
 def quantile_loss(target, forecast, q: float, eval_points) -> float:
     return 2 * np.sum(
@@ -138,7 +117,7 @@ def evaluate(model,
              nsample=50,
              scaler=1,
              mean_scaler=0,
-             foldername=""):   # 新增：每个 batch 重复生成次数（默认 30）
+             foldername=""):
     print( '| nsample=', nsample)
 
     with torch.no_grad():
@@ -201,7 +180,7 @@ def evaluate(model,
 
                 pickle.dump(
                     [all_generated_samples, all_target, all_observed_time,
-                     scaler, mean_scaler, all_samples_list_all],  # 新增保存
+                     scaler, mean_scaler, all_samples_list_all],
                     f,
                 )
 

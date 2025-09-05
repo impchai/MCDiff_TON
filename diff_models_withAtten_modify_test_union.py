@@ -1,7 +1,6 @@
 import math
 
 from timm.models.vision_transformer import PatchEmbed, Attention, Mlp
-
 from exe_contrast import SimpleRegressor
 import torch
 import torch.nn as nn
@@ -15,9 +14,7 @@ def modulate(x, shift, scale):
     return x * (1 + scale) + shift
 
 def Conv1d_with_init(in_channels, out_channels, kernel_size):
-    '''
-    定义并Kaiming初始化一个1D卷积层
-    '''
+
     layer = nn.Conv1d(in_channels, out_channels, kernel_size)
     nn.init.kaiming_normal_(layer.weight)
     return layer
@@ -33,14 +30,12 @@ class STAR(nn.Module):
         C = d_series
 
 
-        # 注意力维度必须是 2*C（因为你 concat 了 x 和 mean）
-        self.ln_chan = nn.LayerNorm(2*C)  # 预归一化更稳
+        self.ln_chan = nn.LayerNorm(2*C)
         self.attn_channel = Attention(
             dim=2*C, num_heads=num_heads, qkv_bias=True, attn_drop=0.0, proj_drop=0.1
         )
 
-        # 用 1x1 Conv 做逐点投影: 2C -> C，再做一个小的 FFN
-        # （保持你原来 Conv1d_with_init 的用法和语义）
+
         self.gen3 = Conv1d_with_init(2*C, C, 1)
         self.gen4 = Conv1d_with_init(C, C, 1)
 
@@ -48,35 +43,32 @@ class STAR(nn.Module):
         B, N, T, C = x.shape
 
         combined_mean2 = torch.mean(x, dim=1, keepdim=True)       # [B,1,T,C]
-        combined_mean2_rep = combined_mean2.expand(-1, N, -1, -1) # 等价 repeat，但不复制内存
+        combined_mean2_rep = combined_mean2.expand(-1, N, -1, -1)
 
-        # mlp fusion（先拼接成 2C）
         combined_mean_cat = torch.cat([x, combined_mean2_rep], -1)  # [B,2,T,2C]
 
-        # === 通道注意力：每个时间步 t 在 N=2 上做自注意力 ===
+
         z = combined_mean_cat.permute(0, 2, 1, 3).reshape(B*T, N, 2*C)  # [B*T,2,2C]
         z = self.ln_chan(z)
         z = self.attn_channel(z)                                         # [B*T,2,2C]
         z = z.reshape(B, T, N, 2*C).permute(0, 2, 1, 3)                  # [B,2,T,2C]
 
-        # === 逐点投影 2C->C（保留你的 gen3/gen4 风格）===
+
         h = z.reshape(B, N*T, 2*C).permute(0, 2, 1)  # [B,2C, N*T] 作为 Conv1d 的 (B, C_in, L)
         h = F.gelu(self.gen3(h))                     # [B,C, N*T]
         h = self.gen4(h)                             # [B,C, N*T]
         h = h.permute(0, 2, 1).reshape(B, N, T, C)   # [B,N,T,C]
 
-        out = F.gelu(h + x)                          # 与输入同形状残差
+        out = F.gelu(h + x)
         return out
 
 
 
     def _build_embedding(self, num_steps, dim=64):
-        '''
-        创建嵌入表
-        '''
+
         steps = torch.arange(num_steps).unsqueeze(1)  # (T,1)
         frequencies = 10.0 ** (torch.arange(dim) / (dim - 1) * 4.0).unsqueeze(0)  # (1,dim)
-        # unsqueeze(0):在第0维度插入一个新的维度，将原本的一维张量变成了一个行向量。
+
         table = steps * frequencies  # (T,dim)
         table = torch.cat([torch.sin(table), torch.cos(table)], dim=1)  # (T,dim*2)
         return table
