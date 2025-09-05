@@ -16,8 +16,4 @@ diffusion:
   num_steps: 500
   schedule: "quad"
 
-model:
-  is_unconditional: True
-  use_4G_pattern : True
-  timeemb: 128
-  featureemb: 128
+
